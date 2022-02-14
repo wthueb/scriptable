@@ -1,5 +1,6 @@
-import { CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN } from "./config";
 import { Spotify } from "./spotify";
+
+import * as config from "./config";
 
 function output(msg: string, error?: boolean) {
   if (error) {
@@ -12,7 +13,7 @@ function output(msg: string, error?: boolean) {
 
 (async () => {
   try {
-    const spot = new Spotify(CLIENT_ID, CLIENT_SECRET, REFRESH_TOKEN);
+    const spot = new Spotify(config.CLIENT_ID, config.CLIENT_SECRET, config.REFRESH_TOKEN);
 
     await spot.updateToken();
 
