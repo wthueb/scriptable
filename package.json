@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "build": "esbuild src/add_track.ts --bundle --platform=node --outfile=dist/add_track.js && ./install.sh"
+    "build": "esbuild src/add_track.ts --bundle --target=es6 --platform=node --outfile=dist/add_track.js && ./install.sh"
   },
   "dependencies": {
     "@types/scriptable-ios": "^1.6.4",
