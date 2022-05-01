@@ -18,7 +18,7 @@ export class Spotify {
     this.refreshToken = refreshToken;
   }
 
-  async updateToken() {
+  async updateToken(): Promise<void> {
     const req = new Request("https://accounts.spotify.com/api/token");
 
     req.method = "post";
@@ -36,7 +36,7 @@ export class Spotify {
     this.accessToken = resp.access_token;
   }
 
-  async getTrack(): Promise<Track | null> {
+  async getCurrentTrack(): Promise<Track> {
     const req = new Request("https://api.spotify.com/v1/me/player");
 
     req.method = "get";
@@ -46,19 +46,19 @@ export class Spotify {
       Accept: "application/json",
     };
 
-    await req.load();
+    const data = await req.load();
 
     if (req.response.statusCode === 204) {
-      return null;
+      throw new Error("no track playing");
     }
 
-    const resp = await req.loadJSON();
+    const resp = JSON.parse(data.toRawString());
 
     // in seconds
     const secondsSincePlaying = (Date.now() - resp.timestamp) / 1000;
 
     if (!resp.is_playing && secondsSincePlaying > 10) {
-      return null;
+      throw new Error("no track playing");
     }
 
     const track = new Track();
@@ -71,7 +71,7 @@ export class Spotify {
     return track;
   }
 
-  async getPlaylistId(): Promise<string | undefined> {
+  async getPlaylistId(): Promise<string> {
     const req = new Request("https://api.spotify.com/v1/me/playlists?limit=50");
 
     req.method = "get";
@@ -100,9 +100,28 @@ export class Spotify {
 
     const playlist = resp.items.find((p: { name: string }) => p.name === month);
 
-    // TODO: https://developer.spotify.com/documentation/web-api/reference/#/operations/create-playlist
+    if (!playlist) {
+      throw new Error("cannot find playlist");
+    }
 
-    return playlist?.id;
+    return playlist.id;
+  }
+
+  async trackAlreadyLiked(track: Track): Promise<boolean> {
+    const req = new Request(
+      `https://api.spotify.com/v1/me/tracks/contains?ids=${track.id}`
+    );
+
+    req.method = "get";
+
+    req.headers = {
+      Authorization: `Bearer ${this.accessToken}`,
+      Accept: "application/json",
+    };
+
+    const resp = await req.loadJSON();
+
+    return resp[0];
   }
 
   async trackAlreadyAdded(track: Track, playlistId: string): Promise<boolean> {
@@ -124,7 +143,74 @@ export class Spotify {
     );
   }
 
-  async addToPlaylist(track: Track, playlistId: string) {
+  async createPlaylist(): Promise<string> {
+    const req = new Request("https://api.spotify.com/v1/me/playlists");
+
+    req.method = "post";
+
+    req.headers = {
+      Authorization: `Bearer ${this.accessToken}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    };
+
+    const month = [
+      "january",
+      "february",
+      "march",
+      "april",
+      "may",
+      "june",
+      "july",
+      "august",
+      "september",
+      "october",
+      "november",
+      "december",
+    ][new Date().getMonth()];
+
+    req.body = JSON.stringify({
+      name: month,
+      public: true,
+      collaborative: false,
+    });
+
+    const data = await req.load();
+
+    if (req.response.statusCode !== 201) {
+      throw new Error("cannot create playlist");
+    }
+
+    const resp = JSON.parse(data.toRawString());
+
+    return resp.id;
+  }
+
+  async likeTrack(track: Track): Promise<void> {
+    if (await this.trackAlreadyLiked(track)) {
+      return;
+    }
+
+    const req = new Request("https://api.spotify.com/v1/me/tracks");
+
+    req.method = "put";
+
+    req.headers = {
+      Authorization: `Bearer ${this.accessToken}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    };
+
+    req.body = JSON.stringify({ ids: [track.id] });
+
+    await req.load();
+
+    // if (req.response.statusCode !== 200) {
+    //   throw new Error("cannot like track");
+    // }
+  }
+
+  async addToPlaylist(track: Track, playlistId: string): Promise<void> {
     if (await this.trackAlreadyAdded(track, playlistId)) {
       throw new Error("track already in playlist");
     }
@@ -144,46 +230,5 @@ export class Spotify {
     req.body = JSON.stringify({ uris: [track.uri] });
 
     await req.load();
-  }
-
-  async trackAlreadyLiked(track: Track): Promise<boolean> {
-    const req = new Request(
-      `https://api.spotify.com/v1/me/tracks/contains?ids=${track.id}`
-    );
-
-    req.method = "get";
-
-    req.headers = {
-      Authorization: `Bearer ${this.accessToken}`,
-      Accept: "application/json",
-    };
-
-    const resp = await req.loadJSON();
-
-    return resp[0];
-  }
-
-  async likeTrack(track: Track) {
-    if (await this.trackAlreadyLiked(track)) {
-      return;
-    }
-
-    const req = new Request("https://api.spotify.com/v1/me/tracks");
-
-    req.method = "put";
-
-    req.headers = {
-      Authorization: `Bearer ${this.accessToken}`,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    };
-
-    req.body = JSON.stringify({ ids: [track.id] });
-
-    await req.load();
-
-    if (req.response.statusCode !== 200) {
-      throw new Error("cannot like track");
-    }
   }
 }

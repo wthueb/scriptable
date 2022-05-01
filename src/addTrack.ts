@@ -1,6 +1,5 @@
-import { Spotify } from "./spotify";
-
 import * as config from "./config";
+import { Spotify } from "./spotify";
 
 function output(msg: string, error?: boolean) {
   if (error) {
@@ -12,23 +11,25 @@ function output(msg: string, error?: boolean) {
 }
 
 (async () => {
+  const spot = new Spotify(
+    config.CLIENT_ID,
+    config.CLIENT_SECRET,
+    config.REFRESH_TOKEN
+  );
+
+  await spot.updateToken();
+
   try {
-    const spot = new Spotify(config.CLIENT_ID, config.CLIENT_SECRET, config.REFRESH_TOKEN);
-
-    await spot.updateToken();
-
-    const currentTrack = await spot.getTrack();
-
-    if (!currentTrack) {
-      return output("there isn't a track playing");
-    }
+    const currentTrack = await spot.getCurrentTrack();
 
     await spot.likeTrack(currentTrack);
 
-    const playlistId = await spot.getPlaylistId();
+    let playlistId;
 
-    if (!playlistId) {
-      return output("you need to make the playlist");
+    try {
+      playlistId = await spot.getPlaylistId();
+    } catch (e) {
+      playlistId = await spot.createPlaylist();
     }
 
     if (await spot.trackAlreadyAdded(currentTrack, playlistId)) {
@@ -42,8 +43,8 @@ function output(msg: string, error?: boolean) {
     output(
       `added ${currentTrack.name} by ${currentTrack.artist} to your playlist`
     );
-  } catch (err) {
-    output(`there was an error: ${err}`, true);
+  } catch (e) {
+    return output("there isn't a track playing");
   }
 })().then(() => {
   Script.complete();
