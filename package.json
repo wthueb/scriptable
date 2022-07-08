@@ -3,7 +3,7 @@
     "build": "esbuild src/addTrack.ts --bundle --target=es6 --outfile=dist/addTrack.js && ./install.sh"
   },
   "dependencies": {
-    "@types/scriptable-ios": "^1.6.4",
+    "@types/scriptable-ios": "^1.6.5",
     "esbuild": "^0.14.21",
     "typescript": "^4.5.4"
   }
