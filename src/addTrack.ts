@@ -22,14 +22,57 @@ function output(msg: string, error?: boolean) {
   try {
     const currentTrack = await spot.getCurrentTrack();
 
+    if (!currentTrack) {
+      return output("no track playing");
+    }
+
     await spot.likeTrack(currentTrack);
 
-    let playlistId;
+    const date = new Date();
 
-    try {
-      playlistId = await spot.getPlaylistId();
-    } catch (e) {
-      playlistId = await spot.createPlaylist();
+    const months = [
+      "january",
+      "february",
+      "march",
+      "april",
+      "may",
+      "june",
+      "july",
+      "august",
+      "september",
+      "october",
+      "november",
+      "december",
+    ];
+
+    let playlistId = await spot.getPlaylist(months[date.getMonth()]);
+
+    if (!playlistId) {
+      playlistId = await spot.createPlaylist(months[date.getMonth()]);
+
+      const year = date.getFullYear();
+
+      let yearPlaylist;
+
+      if (date.getMonth() === 0) {
+        // if it's january now, we need to move the tracks from december to the previous year
+        yearPlaylist = await spot.getPlaylist((year - 1).toString());
+
+        if (!yearPlaylist) {
+          yearPlaylist = await spot.createPlaylist((year - 1).toString());
+        }
+      } else {
+        // we need to move the tracks from the previous month to the current year
+        yearPlaylist = await spot.getPlaylist(year.toString());
+
+        if (!yearPlaylist) {
+          yearPlaylist = await spot.createPlaylist(year.toString());
+        }
+      }
+
+      await spot.mergePlaylists(yearPlaylist, playlistId);
+
+      await spot.deletePlaylist(yearPlaylist);
     }
 
     if (await spot.trackAlreadyAdded(currentTrack, playlistId)) {
@@ -38,13 +81,13 @@ function output(msg: string, error?: boolean) {
       );
     }
 
-    await spot.addToPlaylist(currentTrack, playlistId);
+    await spot.addToPlaylist([currentTrack], playlistId);
 
     output(
       `added ${currentTrack.name} by ${currentTrack.artist} to your playlist`
     );
-  } catch (e) {
-    return output("there isn't a track playing");
+  } catch (e: any) {
+    return output(e, true);
   }
 })().then(() => {
   Script.complete();
