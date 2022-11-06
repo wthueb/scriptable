@@ -45,10 +45,10 @@ function output(msg: string, error?: boolean) {
       "december",
     ];
 
-    let playlistId = await spot.getPlaylist(months[date.getMonth()]);
+    let currentMonth = await spot.getPlaylist(months[date.getMonth()]);
 
-    if (!playlistId) {
-      playlistId = await spot.createPlaylist(months[date.getMonth()]);
+    if (!currentMonth) {
+      currentMonth = await spot.createPlaylist(months[date.getMonth()]);
 
       const year = date.getFullYear();
 
@@ -58,30 +58,31 @@ function output(msg: string, error?: boolean) {
         // if it's january now, we need to move the tracks from december to the previous year
         yearPlaylist = await spot.getPlaylist((year - 1).toString());
 
-        if (!yearPlaylist) {
+        if (!yearPlaylist)
           yearPlaylist = await spot.createPlaylist((year - 1).toString());
-        }
       } else {
         // we need to move the tracks from the previous month to the current year
         yearPlaylist = await spot.getPlaylist(year.toString());
 
-        if (!yearPlaylist) {
+        if (!yearPlaylist)
           yearPlaylist = await spot.createPlaylist(year.toString());
-        }
       }
 
-      await spot.mergePlaylists(yearPlaylist, playlistId);
+      const lastMonth = await spot.getPlaylist(months[date.getMonth() - 1]);
 
-      await spot.deletePlaylist(yearPlaylist);
+      if (lastMonth) {
+        await spot.mergePlaylists(lastMonth, yearPlaylist);
+        await spot.deletePlaylist(lastMonth);
+      }
     }
 
-    if (await spot.trackAlreadyAdded(currentTrack, playlistId)) {
+    if (await spot.trackAlreadyAdded(currentTrack, currentMonth)) {
       return output(
         `${currentTrack.name} by ${currentTrack.artist} is already in your playlist`
       );
     }
 
-    await spot.addToPlaylist([currentTrack], playlistId);
+    await spot.addToPlaylist([currentTrack], currentMonth);
 
     output(
       `added ${currentTrack.name} by ${currentTrack.artist} to your playlist`
