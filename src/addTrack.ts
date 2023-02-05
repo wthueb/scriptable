@@ -1,7 +1,7 @@
 import * as config from "./config";
 import { Spotify } from "./spotify";
 
-function output(msg: string, error?: boolean) {
+function output(msg: string, error?: boolean): void {
   if (error) {
     console.error(msg);
   } else {
@@ -11,22 +11,22 @@ function output(msg: string, error?: boolean) {
 }
 
 (async () => {
-  const spot = new Spotify(
+  const spotify = new Spotify(
     config.CLIENT_ID,
     config.CLIENT_SECRET,
     config.REFRESH_TOKEN
   );
 
-  await spot.updateToken();
+  await spotify.updateToken();
 
   try {
-    const currentTrack = await spot.getCurrentTrack();
+    const currentTrack = await spotify.getCurrentTrack();
 
     if (!currentTrack) {
       return output("no track playing");
     }
 
-    await spot.likeTrack(currentTrack);
+    await spotify.likeTrack(currentTrack);
 
     const date = new Date();
 
@@ -45,44 +45,40 @@ function output(msg: string, error?: boolean) {
       "december",
     ];
 
-    let currentMonth = await spot.getPlaylist(months[date.getMonth()]);
+    let yearPlaylist = await spotify.getPlaylist(date.getFullYear().toString());
 
-    if (!currentMonth) {
-      currentMonth = await spot.createPlaylist(months[date.getMonth()]);
+    if (!yearPlaylist) {
+      yearPlaylist = await spotify.createPlaylist(
+        date.getFullYear().toString()
+      );
 
-      const year = date.getFullYear();
+      // new year, go back and delete all of last year's months
+      for (const month of months) {
+        const playlist = await spotify.getPlaylist(month);
 
-      let yearPlaylist;
-
-      if (date.getMonth() === 0) {
-        // if it's january now, we need to move the tracks from december to the previous year
-        yearPlaylist = await spot.getPlaylist((year - 1).toString());
-
-        if (!yearPlaylist)
-          yearPlaylist = await spot.createPlaylist((year - 1).toString());
-      } else {
-        // we need to move the tracks from the previous month to the current year
-        yearPlaylist = await spot.getPlaylist(year.toString());
-
-        if (!yearPlaylist)
-          yearPlaylist = await spot.createPlaylist(year.toString());
-      }
-
-      const lastMonth = await spot.getPlaylist(months[date.getMonth() - 1]);
-
-      if (lastMonth) {
-        await spot.mergePlaylists(lastMonth, yearPlaylist);
-        await spot.deletePlaylist(lastMonth);
+        if (playlist) {
+          await spotify.deletePlaylist(playlist);
+        }
       }
     }
 
-    if (await spot.trackAlreadyAdded(currentTrack, currentMonth)) {
+    let monthPlaylist = await spotify.getPlaylist(months[date.getMonth()]);
+
+    if (!monthPlaylist) {
+      monthPlaylist = await spotify.createPlaylist(months[date.getMonth()]);
+    }
+
+    if (await spotify.trackAlreadyAdded(currentTrack, monthPlaylist)) {
       return output(
         `${currentTrack.name} by ${currentTrack.artist} is already in your playlist`
       );
     }
 
-    await spot.addToPlaylist([currentTrack], currentMonth);
+    await spotify.addToPlaylist([currentTrack], monthPlaylist);
+
+    if (!(await spotify.trackAlreadyAdded(currentTrack, yearPlaylist))) {
+      await spotify.addToPlaylist([currentTrack], yearPlaylist);
+    }
 
     output(
       `added ${currentTrack.name} by ${currentTrack.artist} to your playlist`

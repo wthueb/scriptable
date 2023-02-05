@@ -1,10 +1,10 @@
 type Playlist = string;
 
 class Track {
-  name: string = "";
-  artist: string = "";
-  uri: string = "";
-  id: string = "";
+  name = "";
+  artist = "";
+  uri = "";
+  id = "";
 }
 
 interface TrackResponse {
@@ -30,7 +30,7 @@ export class Spotify {
   clientSecret: string;
   refreshToken: string;
 
-  accessToken: string = "";
+  accessToken = "";
 
   constructor(clientId: string, clientSecret: string, refreshToken: string) {
     this.clientId = clientId;
