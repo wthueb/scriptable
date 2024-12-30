@@ -1,5 +1,5 @@
-import * as config from "./config";
-import { Spotify } from "./spotify";
+import * as config from './config';
+import { Spotify } from './spotify';
 
 function output(msg: string, error?: boolean): void {
   if (error) {
@@ -11,11 +11,7 @@ function output(msg: string, error?: boolean): void {
 }
 
 (async () => {
-  const spotify = new Spotify(
-    config.CLIENT_ID,
-    config.CLIENT_SECRET,
-    config.REFRESH_TOKEN
-  );
+  const spotify = new Spotify(config.CLIENT_ID, config.CLIENT_SECRET, config.REFRESH_TOKEN);
 
   await spotify.updateToken();
 
@@ -23,7 +19,7 @@ function output(msg: string, error?: boolean): void {
     const currentTrack = await spotify.getCurrentTrack();
 
     if (!currentTrack) {
-      return output("no track playing");
+      return output('no track playing');
     }
 
     await spotify.likeTrack(currentTrack);
@@ -31,26 +27,24 @@ function output(msg: string, error?: boolean): void {
     const date = new Date();
 
     const months = [
-      "january",
-      "february",
-      "march",
-      "april",
-      "may",
-      "june",
-      "july",
-      "august",
-      "september",
-      "october",
-      "november",
-      "december",
+      'january',
+      'february',
+      'march',
+      'april',
+      'may',
+      'june',
+      'july',
+      'august',
+      'september',
+      'october',
+      'november',
+      'december',
     ];
 
     let yearPlaylist = await spotify.getPlaylist(date.getFullYear().toString());
 
     if (!yearPlaylist) {
-      yearPlaylist = await spotify.createPlaylist(
-        date.getFullYear().toString()
-      );
+      yearPlaylist = await spotify.createPlaylist(date.getFullYear().toString());
 
       // new year, go back and delete all of last year's months
       for (const month of months) {
@@ -69,9 +63,7 @@ function output(msg: string, error?: boolean): void {
     }
 
     if (await spotify.trackAlreadyAdded(currentTrack, monthPlaylist)) {
-      return output(
-        `${currentTrack.name} by ${currentTrack.artist} is already in your playlist`
-      );
+      return output(`${currentTrack.name} by ${currentTrack.artist} is already in your playlist`);
     }
 
     await spotify.addToPlaylist([currentTrack], monthPlaylist);
@@ -80,9 +72,7 @@ function output(msg: string, error?: boolean): void {
       await spotify.addToPlaylist([currentTrack], yearPlaylist);
     }
 
-    output(
-      `added ${currentTrack.name} by ${currentTrack.artist} to your playlist`
-    );
+    output(`added ${currentTrack.name} by ${currentTrack.artist} to your playlist`);
   } catch (e: any) {
     return output(e, true);
   }

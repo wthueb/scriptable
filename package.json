@@ -1,16 +1,18 @@
 {
+  "type": "module",
   "scripts": {
     "build": "esbuild src/addTrack.ts --bundle --target=es6 --outfile=dist/addTrack.js && ./install.sh",
-    "lint": "eslint src/**/*.ts"
-  },
-  "dependencies": {
-    "@types/scriptable-ios": "^1.6.5",
-    "esbuild": "^0.14.21",
-    "typescript": "^4.5.4"
+    "lint": "prettier --write src && eslint src"
   },
   "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^5.50.0",
-    "@typescript-eslint/parser": "^5.50.0",
-    "eslint": "^8.33.0"
+    "@eslint/js": "^9.17.0",
+    "@types/eslint-config-prettier": "^6.11.3",
+    "@types/scriptable-ios": "^1.7.7",
+    "esbuild": "^0.24.2",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.2"
   }
 }
