@@ -1,7 +1,7 @@
 import * as config from './config';
 import { Spotify } from './spotify';
 
-function output(msg: string, error?: boolean): void {
+function output(msg: string, error?: boolean) {
   if (error) {
     console.error(msg);
   } else {
@@ -63,7 +63,9 @@ function output(msg: string, error?: boolean): void {
     }
 
     if (await spotify.trackAlreadyAdded(currentTrack, monthPlaylist)) {
-      return output(`${currentTrack.name} by ${currentTrack.artist} is already in your playlist`);
+      return output(
+        `${currentTrack.name} by ${currentTrack.artists[0].name} is already in your playlist`,
+      );
     }
 
     await spotify.addToPlaylist([currentTrack], monthPlaylist);
@@ -72,7 +74,7 @@ function output(msg: string, error?: boolean): void {
       await spotify.addToPlaylist([currentTrack], yearPlaylist);
     }
 
-    output(`added ${currentTrack.name} by ${currentTrack.artist} to your playlist`);
+    output(`added ${currentTrack.name} by ${currentTrack.artists[0].name} to your playlist`);
   } catch (e: any) {
     return output(e, true);
   }

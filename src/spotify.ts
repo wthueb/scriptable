@@ -1,30 +1,5 @@
 type Playlist = string;
 
-class Track {
-  name = '';
-  artist = '';
-  uri = '';
-  id = '';
-}
-
-interface TrackResponse {
-  name: string;
-  artists: [{ name: string }];
-  uri: string;
-  id: string;
-}
-
-function trackFromResponse(response: TrackResponse): Track {
-  const track = new Track();
-
-  track.name = response.name;
-  track.artist = response.artists[0].name;
-  track.uri = response.uri;
-  track.id = response.id;
-
-  return track;
-}
-
 export class Spotify {
   clientId: string;
   clientSecret: string;
@@ -38,7 +13,7 @@ export class Spotify {
     this.refreshToken = refreshToken;
   }
 
-  async updateToken(): Promise<void> {
+  async updateToken() {
     const req = new Request('https://accounts.spotify.com/api/token');
 
     req.method = 'post';
@@ -51,12 +26,12 @@ export class Spotify {
 
     req.body = `grant_type=refresh_token&refresh_token=${this.refreshToken}`;
 
-    const resp = await req.loadJSON();
+    const resp: { access_token: string } = await req.loadJSON();
 
     this.accessToken = resp.access_token;
   }
 
-  async getCurrentTrack(): Promise<Track | undefined> {
+  async getCurrentTrack() {
     // https://developer.spotify.com/documentation/web-api/reference/#/operations/get-information-about-the-users-current-playback
     const req = new Request('https://api.spotify.com/v1/me/player');
 
@@ -73,19 +48,23 @@ export class Spotify {
       return undefined;
     }
 
-    const resp = JSON.parse(data.toRawString());
+    const resp: SpotifyApi.CurrentlyPlayingResponse = JSON.parse(data.toRawString());
 
     // in seconds
     const secondsSincePlaying = (Date.now() - resp.timestamp) / 1000;
 
-    if (!resp.is_playing && secondsSincePlaying > 30) {
+    if (
+      (!resp.is_playing && secondsSincePlaying > 30) ||
+      resp.item === null ||
+      !('artists' in resp.item)
+    ) {
       return undefined;
     }
 
-    return trackFromResponse(resp.item);
+    return resp.item;
   }
 
-  /*   async getCurrentTrack(): Promise<Track> {
+  /*   async getCurrentTrack() {
     // https://developer.spotify.com/documentation/web-api/reference/#/operations/get-the-users-currently-playing-track
     const req = new Request(
       "https://api.spotify.com/v1/me/player/currently-playing"
@@ -109,7 +88,7 @@ export class Spotify {
     return trackFromResponse(resp.item);
   } */
 
-  async trackLiked(track: Track): Promise<boolean> {
+  async trackLiked(track: SpotifyApi.TrackObjectFull) {
     // https://developer.spotify.com/documentation/web-api/reference/#/operations/check-users-saved-tracks
     const req = new Request(`https://api.spotify.com/v1/me/tracks/contains?ids=${track.id}`);
 
@@ -120,12 +99,12 @@ export class Spotify {
       Accept: 'application/json',
     };
 
-    const resp = await req.loadJSON();
+    const resp: SpotifyApi.CheckUsersSavedTracksResponse = await req.loadJSON();
 
     return resp[0];
   }
 
-  async likeTrack(track: Track): Promise<void> {
+  async likeTrack(track: SpotifyApi.TrackObjectFull) {
     // https://developer.spotify.com/documentation/web-api/reference/#/operations/save-tracks-user
     if (await this.trackLiked(track)) {
       return;
@@ -150,7 +129,7 @@ export class Spotify {
     // }
   }
 
-  async getPlaylist(name: string): Promise<Playlist | undefined> {
+  async getPlaylist(name: string) {
     // https://developer.spotify.com/documentation/web-api/reference/#/operations/get-playlist
     const req = new Request('https://api.spotify.com/v1/me/playlists');
 
@@ -161,9 +140,9 @@ export class Spotify {
       Accept: 'application/json',
     };
 
-    const resp = await req.loadJSON();
+    const resp: SpotifyApi.ListOfCurrentUsersPlaylistsResponse = await req.loadJSON();
 
-    const playlist = resp.items.find((p: { name: string }) => p.name === name);
+    const playlist = resp.items.find((p) => p.name === name);
 
     if (!playlist) {
       return undefined;
@@ -172,7 +151,7 @@ export class Spotify {
     return playlist.id;
   }
 
-  async createPlaylist(name: string): Promise<Playlist> {
+  async createPlaylist(name: string) {
     // https://developer.spotify.com/documentation/web-api/reference/#/operations/create-playlist
     const req = new Request('https://api.spotify.com/v1/me/playlists');
 
@@ -196,16 +175,16 @@ export class Spotify {
       throw new Error('cannot create playlist');
     }
 
-    const resp = JSON.parse(data.toRawString());
+    const resp: SpotifyApi.CreatePlaylistResponse = JSON.parse(data.toRawString());
 
     return resp.id;
   }
 
-  async deletePlaylist(_playlist: Playlist): Promise<void> {
+  async deletePlaylist(_playlist: Playlist) {
     // TODO: this isn't documented???
   }
 
-  async getPlaylistTracks(playlist: Playlist): Promise<Track[]> {
+  async getPlaylistTracks(playlist: Playlist) {
     // https://developer.spotify.com/documentation/web-api/reference/#/operations/get-playlists-tracks
     const req = new Request(`https://api.spotify.com/v1/playlists/${playlist}/tracks?limit=50`);
 
@@ -216,18 +195,18 @@ export class Spotify {
       Accept: 'application/json',
     };
 
-    const resp = await req.loadJSON();
+    const resp: SpotifyApi.PlaylistTrackResponse = await req.loadJSON();
 
-    return resp.items.map((item: { track: TrackResponse }) => trackFromResponse(item.track));
+    return resp.items.filter((item) => item.track !== null).map((item) => item.track!);
   }
 
-  async trackAlreadyAdded(track: Track, playlist: Playlist): Promise<boolean> {
+  async trackAlreadyAdded(track: SpotifyApi.TrackObjectFull, playlist: Playlist) {
     const playlistTracks = await this.getPlaylistTracks(playlist);
 
-    return playlistTracks.some((t: Track) => t.id === track.id);
+    return playlistTracks.some((t) => t.id === track.id);
   }
 
-  async addToPlaylist(tracks: Track[], playlist: Playlist): Promise<void> {
+  async addToPlaylist(tracks: SpotifyApi.TrackObjectFull[], playlist: Playlist) {
     // https://developer.spotify.com/documentation/web-api/reference/#/operations/add-tracks-to-playlist
     if (tracks.length === 1 && (await this.trackAlreadyAdded(tracks[0], playlist))) {
       throw new Error('track already in playlist');
@@ -248,7 +227,7 @@ export class Spotify {
     await req.load();
   }
 
-  async mergePlaylists(playlistFrom: Playlist, playlistTo: Playlist): Promise<void> {
+  async mergePlaylists(playlistFrom: Playlist, playlistTo: Playlist) {
     // TODO
     const tracksFrom = await this.getPlaylistTracks(playlistFrom);
     const tracksTo = await this.getPlaylistTracks(playlistTo);
