@@ -89,8 +89,8 @@ export class Spotify {
   } */
 
   async trackLiked(track: SpotifyApi.TrackObjectFull) {
-    // https://developer.spotify.com/documentation/web-api/reference/#/operations/check-users-saved-tracks
-    const req = new Request(`https://api.spotify.com/v1/me/tracks/contains?ids=${track.id}`);
+    // https://developer.spotify.com/documentation/web-api/reference/check-library-contains
+    const req = new Request(`https://api.spotify.com/v1/me/library/contains?ids=${track.id}`);
 
     req.method = 'get';
 
@@ -105,12 +105,12 @@ export class Spotify {
   }
 
   async likeTrack(track: SpotifyApi.TrackObjectFull) {
-    // https://developer.spotify.com/documentation/web-api/reference/#/operations/save-tracks-user
+    // https://developer.spotify.com/documentation/web-api/reference/save-library-items
     if (await this.trackLiked(track)) {
       return;
     }
 
-    const req = new Request('https://api.spotify.com/v1/me/tracks');
+    const req = new Request('https://api.spotify.com/v1/me/library');
 
     req.method = 'put';
 
@@ -185,8 +185,8 @@ export class Spotify {
   }
 
   async getPlaylistTracks(playlist: Playlist) {
-    // https://developer.spotify.com/documentation/web-api/reference/#/operations/get-playlists-tracks
-    const req = new Request(`https://api.spotify.com/v1/playlists/${playlist}/tracks?limit=50`);
+    // https://developer.spotify.com/documentation/web-api/reference/#/operations/get-playlists-items
+    const req = new Request(`https://api.spotify.com/v1/playlists/${playlist}/items?limit=50`);
 
     req.method = 'get';
 
@@ -207,12 +207,12 @@ export class Spotify {
   }
 
   async addToPlaylist(tracks: SpotifyApi.TrackObjectFull[], playlist: Playlist) {
-    // https://developer.spotify.com/documentation/web-api/reference/#/operations/add-tracks-to-playlist
+    // https://developer.spotify.com/documentation/web-api/reference/add-items-to-playlist
     if (tracks.length === 1 && (await this.trackAlreadyAdded(tracks[0], playlist))) {
       throw new Error('track already in playlist');
     }
 
-    const req = new Request(`https://api.spotify.com/v1/playlists/${playlist}/tracks`);
+    const req = new Request(`https://api.spotify.com/v1/playlists/${playlist}/items`);
 
     req.method = 'post';
 
