@@ -53,11 +53,7 @@ export class Spotify {
     // in seconds
     const secondsSincePlaying = (Date.now() - resp.timestamp) / 1000;
 
-    if (
-      (!resp.is_playing && secondsSincePlaying > 30) ||
-      resp.item === null ||
-      !('artists' in resp.item)
-    ) {
+    if (resp.item === null || !('artists' in resp.item)) {
       return undefined;
     }
 
