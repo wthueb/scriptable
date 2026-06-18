@@ -10,73 +10,75 @@ function output(msg: string, error?: boolean) {
   Script.setShortcutOutput(msg);
 }
 
-(async () => {
-  const spotify = new Spotify(config.CLIENT_ID, config.CLIENT_SECRET, config.REFRESH_TOKEN);
+async function addTrack(spotify: Spotify): Promise<string> {
+  const currentTrack = await spotify.getCurrentTrack();
 
-  await spotify.updateToken();
+  if (!currentTrack) {
+    return 'no track playing';
+  }
 
-  try {
-    const currentTrack = await spotify.getCurrentTrack();
+  await spotify.likeTrack(currentTrack);
 
-    if (!currentTrack) {
-      return output('no track playing');
-    }
+  const date = new Date();
 
-    await spotify.likeTrack(currentTrack);
+  const months = [
+    'january',
+    'february',
+    'march',
+    'april',
+    'may',
+    'june',
+    'july',
+    'august',
+    'september',
+    'october',
+    'november',
+    'december',
+  ];
 
-    const date = new Date();
+  let yearPlaylist = await spotify.getPlaylist(date.getFullYear().toString());
 
-    const months = [
-      'january',
-      'february',
-      'march',
-      'april',
-      'may',
-      'june',
-      'july',
-      'august',
-      'september',
-      'october',
-      'november',
-      'december',
-    ];
+  if (!yearPlaylist) {
+    yearPlaylist = await spotify.createPlaylist(date.getFullYear().toString());
 
-    let yearPlaylist = await spotify.getPlaylist(date.getFullYear().toString());
+    // new year, go back and delete all of last year's months
+    for (const month of months) {
+      const playlist = await spotify.getPlaylist(month);
 
-    if (!yearPlaylist) {
-      yearPlaylist = await spotify.createPlaylist(date.getFullYear().toString());
-
-      // new year, go back and delete all of last year's months
-      for (const month of months) {
-        const playlist = await spotify.getPlaylist(month);
-
-        if (playlist) {
-          await spotify.deletePlaylist(playlist);
-        }
+      if (playlist) {
+        await spotify.deletePlaylist(playlist);
       }
     }
+  }
 
-    let monthPlaylist = await spotify.getPlaylist(months[date.getMonth()]);
+  let monthPlaylist = await spotify.getPlaylist(months[date.getMonth()]);
 
-    if (!monthPlaylist) {
-      monthPlaylist = await spotify.createPlaylist(months[date.getMonth()]);
-    }
+  if (!monthPlaylist) {
+    monthPlaylist = await spotify.createPlaylist(months[date.getMonth()]);
+  }
 
-    if (await spotify.trackAlreadyAdded(currentTrack, monthPlaylist)) {
-      return output(
-        `${currentTrack.name} by ${currentTrack.artists[0].name} is already in your playlist`,
-      );
-    }
+  if (await spotify.trackAlreadyAdded(currentTrack, monthPlaylist)) {
+    return `${currentTrack.name} by ${currentTrack.artists[0].name} is already in your playlist`;
+  }
 
-    await spotify.addToPlaylist([currentTrack], monthPlaylist);
+  await spotify.addToPlaylist([currentTrack], monthPlaylist);
 
-    if (!(await spotify.trackAlreadyAdded(currentTrack, yearPlaylist))) {
-      await spotify.addToPlaylist([currentTrack], yearPlaylist);
-    }
+  if (!(await spotify.trackAlreadyAdded(currentTrack, yearPlaylist))) {
+    await spotify.addToPlaylist([currentTrack], yearPlaylist);
+  }
 
-    output(`added ${currentTrack.name} by ${currentTrack.artists[0].name} to your playlist`);
+  return `added ${currentTrack.name} by ${currentTrack.artists[0].name} to your playlist`;
+}
+
+(async () => {
+  try {
+    const spotify = new Spotify(config.CLIENT_ID, config.CLIENT_SECRET);
+
+    await spotify.authenticate();
+
+    output(await addTrack(spotify));
   } catch (e: any) {
-    return output(e, true);
+    output(String(e?.message ?? e), true);
   }
 })().then(() => {
   Script.complete();

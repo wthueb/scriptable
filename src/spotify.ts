@@ -1,20 +1,95 @@
 type Playlist = string;
 
+const TOKEN_URL = 'https://accounts.spotify.com/api/token';
+const AUTHORIZE_URL = 'https://accounts.spotify.com/authorize';
+const REDIRECT_URI = 'https://open.scriptable.app/run';
+
+const REFRESH_TOKEN_KEY = 'spotify-refresh-token';
+
+const SCOPES = [
+  'user-read-playback-state',
+  'user-library-read',
+  'user-library-modify',
+  'playlist-read-private',
+  'playlist-modify-public',
+  'playlist-modify-private',
+].join(' ');
+
+interface TokenResponse {
+  access_token?: string;
+  refresh_token?: string;
+  error?: string;
+  error_description?: string;
+}
+
+export class RefreshTokenExpiredError extends Error {
+  constructor(message = 'Spotify refresh token expired') {
+    super(message);
+    this.name = 'RefreshTokenExpiredError';
+  }
+}
+
+function parseQuery(url: string) {
+  const result: { [key: string]: string } = {};
+  const start = url.indexOf('?');
+
+  if (start === -1) {
+    return result;
+  }
+
+  for (const pair of url.slice(start + 1).split('&')) {
+    const eq = pair.indexOf('=');
+    const key = eq === -1 ? pair : pair.slice(0, eq);
+    const value = eq === -1 ? '' : pair.slice(eq + 1);
+    result[decodeURIComponent(key)] = decodeURIComponent(value);
+  }
+
+  return result;
+}
+
+function canPresentUI() {
+  //return config.runsInApp || config.runsInActionExtension;
+  return true;
+}
+
 export class Spotify {
   clientId: string;
   clientSecret: string;
-  refreshToken: string;
 
   accessToken = '';
 
-  constructor(clientId: string, clientSecret: string, refreshToken: string) {
+  private refreshToken: string;
+
+  constructor(clientId: string, clientSecret: string) {
     this.clientId = clientId;
     this.clientSecret = clientSecret;
-    this.refreshToken = refreshToken;
+    this.refreshToken = Keychain.contains(REFRESH_TOKEN_KEY) ? Keychain.get(REFRESH_TOKEN_KEY) : '';
+  }
+
+  private setRefreshToken(token: string) {
+    this.refreshToken = token;
+    Keychain.set(REFRESH_TOKEN_KEY, token);
+  }
+
+  async authenticate() {
+    if (!this.refreshToken) {
+      await this.authorize();
+      return;
+    }
+
+    try {
+      await this.updateToken();
+    } catch (e) {
+      if (!(e instanceof RefreshTokenExpiredError)) {
+        throw e;
+      }
+
+      await this.authorize();
+    }
   }
 
   async updateToken() {
-    const req = new Request('https://accounts.spotify.com/api/token');
+    const req = new Request(TOKEN_URL);
 
     req.method = 'post';
 
@@ -24,11 +99,129 @@ export class Spotify {
       'Content-Type': 'application/x-www-form-urlencoded',
     };
 
-    req.body = `grant_type=refresh_token&refresh_token=${this.refreshToken}`;
+    req.body = `grant_type=refresh_token&refresh_token=${encodeURIComponent(this.refreshToken)}`;
 
-    const resp: { access_token: string } = await req.loadJSON();
+    const resp: TokenResponse = await req.loadJSON();
+
+    if (!resp.access_token) {
+      if (resp.error === 'invalid_grant') {
+        throw new RefreshTokenExpiredError(resp.error_description ?? resp.error);
+      }
+
+      throw new Error(resp.error_description ?? resp.error ?? 'could not refresh access token');
+    }
 
     this.accessToken = resp.access_token;
+
+    if (resp.refresh_token) {
+      this.setRefreshToken(resp.refresh_token);
+    }
+  }
+
+  async authorize() {
+    if (!canPresentUI()) {
+      throw new Error(
+        'Spotify needs authorization. Open this script in the Scriptable app and run it to sign in.',
+      );
+    }
+
+    const code = await this.requestAuthorizationCode();
+    const token = await this.exchangeCode(code);
+
+    if (!token.refresh_token) {
+      throw new Error(
+        token.error_description ?? token.error ?? 'no refresh token returned by Spotify',
+      );
+    }
+
+    this.setRefreshToken(token.refresh_token);
+
+    if (token.access_token) {
+      this.accessToken = token.access_token;
+    }
+  }
+
+  private authorizationURL(state: string) {
+    const query = [
+      `client_id=${encodeURIComponent(this.clientId)}`,
+      'response_type=code',
+      `redirect_uri=${encodeURIComponent(REDIRECT_URI)}`,
+      `scope=${encodeURIComponent(SCOPES)}`,
+      `state=${encodeURIComponent(state)}`,
+    ].join('&');
+
+    return `${AUTHORIZE_URL}?${query}`;
+  }
+
+  private async requestAuthorizationCode(): Promise<string> {
+    const state = UUID.string();
+    const webView = new WebView();
+
+    let code: string | null = null;
+    let error: string | null = null;
+    let returnedState: string | null = null;
+
+    webView.shouldAllowRequest = (request) => {
+      console.log(`web view request: ${request.url}`);
+
+      if (!request.url.startsWith(REDIRECT_URI)) {
+        console.log('ignoring web view request');
+        return true;
+      }
+
+      const params = parseQuery(request.url);
+      console.log(params);
+
+      code = params.code;
+      error = params.error;
+      returnedState = params.state;
+
+      return false;
+    };
+
+    console.log(`requesting Spotify authorization with state ${state}`);
+
+    webView.loadURL(this.authorizationURL(state));
+
+    console.log('presenting authorization web view');
+
+    await webView.present(true);
+
+    console.log('authorization web view dismissed');
+
+    if (error) {
+      throw new Error(`authorization failed: ${error}`);
+    }
+
+    if (!code) {
+      throw new Error('authorization was canceled');
+    }
+
+    if (returnedState !== state) {
+      throw new Error('state mismatch; aborting');
+    }
+
+    return code;
+  }
+
+  private async exchangeCode(code: string): Promise<TokenResponse> {
+    const req = new Request(TOKEN_URL);
+
+    req.method = 'post';
+
+    req.headers = {
+      Authorization: `Basic ${btoa(this.clientId + ':' + this.clientSecret)}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
+    };
+
+    req.body = [
+      'grant_type=authorization_code',
+      `code=${encodeURIComponent(code)}`,
+      `redirect_uri=${encodeURIComponent(REDIRECT_URI)}`,
+    ].join('&');
+
+    return req.loadJSON();
   }
 
   async getCurrentTrack() {
@@ -50,9 +243,6 @@ export class Spotify {
 
     const resp: SpotifyApi.CurrentlyPlayingResponse = JSON.parse(data.toRawString());
 
-    // in seconds
-    const secondsSincePlaying = (Date.now() - resp.timestamp) / 1000;
-
     if (resp.item === null || !('artists' in resp.item)) {
       return undefined;
     }
@@ -60,29 +250,29 @@ export class Spotify {
     return resp.item;
   }
 
-  /*   async getCurrentTrack() {
-    // https://developer.spotify.com/documentation/web-api/reference/#/operations/get-the-users-currently-playing-track
-    const req = new Request(
-      "https://api.spotify.com/v1/me/player/currently-playing"
-    );
-
-    req.method = "get";
-
-    req.headers = {
-      Authorization: `Bearer ${this.accessToken}`,
-      Accept: "application/json",
-    };
-
-    const data = await req.load();
-
-    if (req.response.statusCode !== 200) {
-      throw new Error("no track playing");
-    }
-
-    const resp = JSON.parse(data.toRawString());
-
-    return trackFromResponse(resp.item);
-  } */
+  // async getCurrentTrack() {
+  //   // https://developer.spotify.com/documentation/web-api/reference/#/operations/get-the-users-currently-playing-track
+  //   const req = new Request(
+  //     "https://api.spotify.com/v1/me/player/currently-playing"
+  //   );
+  //
+  //   req.method = "get";
+  //
+  //   req.headers = {
+  //     Authorization: `Bearer ${this.accessToken}`,
+  //     Accept: "application/json",
+  //   };
+  //
+  //   const data = await req.load();
+  //
+  //   if (req.response.statusCode !== 200) {
+  //     throw new Error("no track playing");
+  //   }
+  //
+  //   const resp = JSON.parse(data.toRawString());
+  //
+  //   return trackFromResponse(resp.item);
+  // }
 
   async trackLiked(track: SpotifyApi.TrackObjectFull) {
     // https://developer.spotify.com/documentation/web-api/reference/check-library-contains
