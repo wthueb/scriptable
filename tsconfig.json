@@ -1,9 +1,16 @@
 {
   "compilerOptions": {
-    "target": "es6",
-    "lib": ["es6"],
+    "target": "es2023",
+    "lib": ["es2023"],
+
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "noEmit": true,
 
     "strict": true,
-    "esModuleInterop": true
-  }
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": ["src"]
 }

@@ -1,7 +1,8 @@
 {
   "type": "module",
   "scripts": {
-    "build": "esbuild src/addTrack.ts --bundle --target=es6 --outfile=dist/addTrack.js && ./install.sh",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && esbuild src/addTrack.ts --bundle --target=es2022 --outfile=dist/addTrack.js && ./install.sh",
     "lint": "prettier --write src && eslint src"
   },
   "devDependencies": {
