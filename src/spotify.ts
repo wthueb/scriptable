@@ -2,7 +2,7 @@ type Playlist = string;
 
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const AUTHORIZE_URL = 'https://accounts.spotify.com/authorize';
-const REDIRECT_URI = 'https://open.scriptable.app/run';
+const REDIRECT_URI = 'https://dummy-redirect-uri-for-scriptable.com/callback';
 
 const REFRESH_TOKEN_KEY = 'spotify-refresh-token';
 
@@ -125,7 +125,7 @@ export class Spotify {
       );
     }
 
-    const code = await this.requestAuthorizationCode();
+    const code = await this.getAuthorizationCode();
     const token = await this.exchangeCode(code);
 
     if (!token.refresh_token) {
@@ -141,56 +141,48 @@ export class Spotify {
     }
   }
 
-  private authorizationURL(state: string) {
-    const query = [
-      `client_id=${encodeURIComponent(this.clientId)}`,
-      'response_type=code',
-      `redirect_uri=${encodeURIComponent(REDIRECT_URI)}`,
-      `scope=${encodeURIComponent(SCOPES)}`,
-      `state=${encodeURIComponent(state)}`,
-    ].join('&');
-
-    return `${AUTHORIZE_URL}?${query}`;
-  }
-
-  private async requestAuthorizationCode(): Promise<string> {
+  private async getAuthorizationCode(): Promise<string> {
     const state = UUID.string();
     const webView = new WebView();
 
-    let code: string | undefined;
-    let error: string | undefined;
-    let returnedState: string | undefined;
+    return new Promise((resolve) => {
+      webView.shouldAllowRequest = (request) => {
+        if (!request.url.startsWith(REDIRECT_URI)) {
+          return true;
+        }
 
-    webView.shouldAllowRequest = (request) => {
-      if (!request.url.startsWith(REDIRECT_URI)) {
-        return true;
-      }
+        const params = parseQuery(request.url);
 
-      const params = parseQuery(request.url);
+        if (params.error) {
+          throw new Error(`authorization failed: ${params.error}`);
+        }
 
-      code = params.code;
-      error = params.error;
-      returnedState = params.state;
+        if (!params.code) {
+          throw new Error('authorization was canceled');
+        }
 
-      return false;
-    };
+        if (params.state !== state) {
+          throw new Error('state mismatch; aborting');
+        }
 
-    webView.loadURL(this.authorizationURL(state));
-    await webView.present(false);
+        resolve(params.code);
 
-    if (error) {
-      throw new Error(`authorization failed: ${error}`);
-    }
+        return false;
+      };
 
-    if (!code) {
-      throw new Error('authorization was canceled');
-    }
+      const query = [
+        `client_id=${encodeURIComponent(this.clientId)}`,
+        'response_type=code',
+        `redirect_uri=${encodeURIComponent(REDIRECT_URI)}`,
+        `scope=${encodeURIComponent(SCOPES)}`,
+        `state=${encodeURIComponent(state)}`,
+      ].join('&');
 
-    if (returnedState !== state) {
-      throw new Error('state mismatch; aborting');
-    }
+      const authorization_url = `${AUTHORIZE_URL}?${query}`;
 
-    return code;
+      webView.loadURL(authorization_url);
+      webView.present(false);
+    });
   }
 
   private async exchangeCode(code: string): Promise<TokenResponse> {
