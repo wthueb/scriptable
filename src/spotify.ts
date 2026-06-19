@@ -30,7 +30,7 @@ export class RefreshTokenExpiredError extends Error {
 }
 
 function parseQuery(url: string) {
-  const result: { [key: string]: string } = {};
+  const result: { [key: string]: string | undefined } = {};
   const start = url.indexOf('?');
 
   if (start === -1) {
@@ -157,20 +157,16 @@ export class Spotify {
     const state = UUID.string();
     const webView = new WebView();
 
-    let code: string | null = null;
-    let error: string | null = null;
-    let returnedState: string | null = null;
+    let code: string | undefined;
+    let error: string | undefined;
+    let returnedState: string | undefined;
 
     webView.shouldAllowRequest = (request) => {
-      console.log(`web view request: ${request.url}`);
-
       if (!request.url.startsWith(REDIRECT_URI)) {
-        console.log('ignoring web view request');
         return true;
       }
 
       const params = parseQuery(request.url);
-      console.log(params);
 
       code = params.code;
       error = params.error;
@@ -179,15 +175,8 @@ export class Spotify {
       return false;
     };
 
-    console.log(`requesting Spotify authorization with state ${state}`);
-
     webView.loadURL(this.authorizationURL(state));
-
-    console.log('presenting authorization web view');
-
-    await webView.present(true);
-
-    console.log('authorization web view dismissed');
+    await webView.present(false);
 
     if (error) {
       throw new Error(`authorization failed: ${error}`);
